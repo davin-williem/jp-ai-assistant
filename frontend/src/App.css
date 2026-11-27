@@ -100,3 +100,17 @@ button:disabled {
 .controls button {
   background: #6b7280;
 }
+
+.mic {
+  background: #6b7280;
+  padding: 8px 12px;
+}
+.mic.recording {
+  background: #dc2626;
+  animation: pulse 1s infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.6;
+  }
+}

@@ -32,6 +32,10 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [autoSpeak, setAutoSpeak] = useState(true);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
   const audioRef = useRef(null);
   const bottomRef = useRef(null);
 
@@ -86,6 +90,61 @@ export default function App() {
     }
   }
 
+  async function toggleRecording() {
+    if (recording) {
+      recorderRef.current?.stop();
+      return;
+    }
+    try {
+      audioRef.current?.pause(); // don't record the tutor's own voice
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setRecording(false);
+        const blob = new Blob(chunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        await transcribe(blob);
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+      setError("");
+    } catch {
+      setError("Microphone access was denied or is unavailable.");
+    }
+  }
+
+  async function transcribe(blob) {
+    setTranscribing(true);
+    try {
+      const form = new FormData();
+      form.append("audio", blob, "speech.webm");
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) throw new Error(`Transcription error (${res.status})`);
+      const data = await res.json();
+      if (!data.text) {
+        setError(
+          "I couldn't hear anything. Try again, a bit closer to the mic.",
+        );
+      } else {
+        setInput(data.text); // you can check and edit it before sending
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
   return (
     <div className="app">
       <header>
@@ -130,13 +189,30 @@ export default function App() {
       </main>
 
       <form onSubmit={send}>
+        <button
+          type="button"
+          className={recording ? "mic recording" : "mic"}
+          onClick={toggleRecording}
+          disabled={loading || transcribing}
+          title={recording ? "Stop recording" : "Speak"}
+        >
+          {recording ? "⏹" : "🎤"}
+        </button>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="日本語で書いてみましょう"
-          disabled={loading}
+          placeholder={
+            recording
+              ? "Listening…"
+              : transcribing
+                ? "Transcribing…"
+                : "日本語で書いてみましょう"
+          }
+          disabled={loading || transcribing}
         />
-        <button disabled={loading || !input.trim()}>Send</button>
+        <button disabled={loading || transcribing || !input.trim()}>
+          Send
+        </button>
       </form>
     </div>
   );
