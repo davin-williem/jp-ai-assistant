@@ -1,9 +1,12 @@
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
-from main import ask                
+from langfuse import get_client
+
+from main import ask     
+from tts import synthesize           
 from prompts import SYSTEM_PROMPT 
 
 app = FastAPI(title="Japanese Tutor API")
@@ -20,6 +23,21 @@ class ChatRequest(BaseModel):
     lang: str = "English"
 
 
+class TTSRequest(BaseModel):
+    text: str
+    
+
+@app.post("/api/tts")
+async def tts(req: TTSRequest):
+    try:
+        audio = await synthesize(req.text)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"TTS failed: {e}")
+    if not audio:
+        raise HTTPException(status_code=400, detail="Nothing to speak")
+    return Response(content=audio, media_type="audio/mpeg")
+
+
 @app.post("/api/chat")
 def chat(req: ChatRequest):  # plain def: FastAPI runs it in a thread, so blocking calls are fine
     system = SYSTEM_PROMPT.format(level=req.level, lang=req.lang)
@@ -34,6 +52,10 @@ def chat(req: ChatRequest):  # plain def: FastAPI runs it in a thread, so blocki
         raise HTTPException(status_code=502, detail=str(e))
     return {"reply": reply}
 
+
+@app.on_event("shutdown")
+def _flush():
+    get_client().flush()
 
 @app.get("/api/health")
 def health():

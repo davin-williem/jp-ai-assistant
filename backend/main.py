@@ -8,8 +8,6 @@ from langfuse.openai import OpenAI
 
 from prompts import SYSTEM_PROMPT
 
-from sound import speak, listen
-
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.environ["OPENROUTER_API_KEY"],
@@ -35,15 +33,18 @@ def ask(system, history):
             text = r.choices[0].message.content
             if text and text.strip():
                 return text.strip()
-            print(f"[{model} returned an empty reply (finish_reason={r.choices[0].finish_reason})]")
+            last_err = RuntimeError(
+                f"{model} returned an empty reply (finish_reason={r.choices[0].finish_reason})"
+            )
+            print(f"[{last_err}]")
             # print(r.choices[0].finish_reason)
-            return r.choices[0].message.content
         except Exception as e:
             last_err = e
             print(f"[{model} failed: {e}]")
     raise last_err
 
 def chat(level="JLPT N3", lang="English", topic="favorite food"):
+    from sound import speak, listen
     system = SYSTEM_PROMPT.format(level=level, lang=lang)
     history = [{"role": "user", "content": f"(start the conversation about: {topic})"}]
     text = ask(system, history)
