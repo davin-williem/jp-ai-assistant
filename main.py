@@ -8,6 +8,8 @@ from langfuse.openai import OpenAI
 
 from prompts import SYSTEM_PROMPT
 
+from sound import speak, listen
+
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.environ["OPENROUTER_API_KEY"],
@@ -47,17 +49,21 @@ def chat(level="JLPT N3", lang="English", topic="favorite food"):
     text = ask(system, history)
     history.append({"role": "assistant", "content": text})
     print(f"\n先生: {text}\n")
+    speak(text)
 
     while True:
-        user_input = input("あなた: ").strip()
+        user_input = listen()
         if user_input.lower() in {"quit", "exit", "q"}:
             print("またね！")
             break
+        if not user_input:
+            continue
         history.append({"role": "user", "content": user_input})
         history = history[-20:]  # keep recent turns only
         text = ask(system, history)
         history.append({"role": "assistant", "content": text})
         print(f"\n先生: {text}\n")
+        speak(text)
 
 if __name__ == "__main__":
     try:
