@@ -1,13 +1,16 @@
+import io
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, File, UploadFile
 from pydantic import BaseModel
+import logging
 
 from langfuse import get_client
 
-from main import ask     
+from main import ask
 from tts import synthesize           
 from prompts import SYSTEM_PROMPT 
+from transcribe import transcribe_file
 
 app = FastAPI(title="Japanese Tutor API")
 
@@ -26,6 +29,8 @@ class ChatRequest(BaseModel):
 class TTSRequest(BaseModel):
     text: str
     
+    
+log = logging.getLogger("uvicorn.error")
 
 @app.post("/api/tts")
 async def tts(req: TTSRequest):
@@ -51,6 +56,19 @@ def chat(req: ChatRequest):  # plain def: FastAPI runs it in a thread, so blocki
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
     return {"reply": reply}
+
+
+@app.post("/api/transcribe")
+def transcribe(audio: UploadFile = File(...)):  # plain def: Whisper is blocking, so it runs in a thread
+    data = audio.file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty audio")
+    try:
+        text = transcribe_file(io.BytesIO(data))
+    except Exception as e:
+        log.exception("Transcription failed")   # prints the traceback
+        raise HTTPException(status_code=502, detail=f"Transcription failed: {e}")
+    return {"text": text}
 
 
 @app.on_event("shutdown")
